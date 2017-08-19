@@ -12,10 +12,14 @@ from TOSSIM import *;
 
 t = Tossim([]);
 
+ # load topology
+#topofile="15-15-tight-mica2-grid.txt"; 
+#topofile="15-15-medium-mica2-grid.txt"; 
+#topofile="15-15-sparse-mica2-grid.txt"; 
+topofile="topology.txt";
 
-topofile="15-15-tight-mica2-grid.txt";  # load topology
-#topofile="topology.txt";
-modelfile="meyer-heavy.txt"; # and model
+# and model
+modelfile="meyer-heavy.txt"; 
 
 
 print "Initializing mac....";
