@@ -16,20 +16,12 @@ implementation {
         components new AMReceiverC(AM_MY_MSG);
         components ActiveMessageC;
         
-        //Serial components
-        components SerialActiveMessageC as Serial;
-        
         //Send and Receive interfaces
         App.Receive -> AMReceiverC;
         App.RadioAMSend -> AMSenderC;
 
         //Radio Control
         App.RadioControl -> ActiveMessageC;
-        
-        //Serial Control
-        App.SerialControl -> Serial;
-        App.SerialAMSend -> Serial.AMSend[AM_TEST_SERIAL_MSG];
-        App.SerialPacket -> Serial;
         
         //Interfaces to access package fields
         App.AMPacket -> AMSenderC;
@@ -42,12 +34,8 @@ implementation {
         components new TimerMilliC() as RespTimer;
         components new TimerMilliC() as RelayCollectTimer;
         components new TimerMilliC() as RelayResponseTimer;
-
-        //sensors
-        components new TempHumSensorC();
         
-        //Boot interface
-        App.Boot -> MainC.Boot;
+        components LocalTimeMilliC;
         
         //Timer interfaces
         App.CollectTimer -> CollectTimer;
@@ -55,6 +43,15 @@ implementation {
         App.RespTimer -> RespTimer;
         App.RelayCollectTimer -> RelayCollectTimer;
         App.RelayResponseTimer -> RelayResponseTimer;
+        App.LocalTime -> LocalTimeMilliC;
+
+        //sensors
+        components new TempHumSensorC();
+        
+        //Boot interface
+        App.Boot -> MainC.Boot;
+        
+        
         //Temp sensor Read
         App.TempRead -> TempHumSensorC.TempRead;
         App.HumRead -> TempHumSensorC.HumRead;

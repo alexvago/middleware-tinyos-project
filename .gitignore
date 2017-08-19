@@ -3,3 +3,6 @@ app.xml
 TOSSIM.py
 _TOSSIMmodule.so
 *.*~
+*~
+.goutputstream-*
+TOSSIM.pyc

@@ -16,8 +16,4 @@ enum{
 AM_MY_MSG = 6,
 };
 
-enum {
-  AM_TEST_SERIAL_MSG = 0x89,
-};
-
 #endif

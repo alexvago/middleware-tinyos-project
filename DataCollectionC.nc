@@ -1,10 +1,9 @@
-
 #include "data_collection.h"
 #define SINK_ROLE 1
 #define SENSOR_ROLE 2
 
-#define COLLECT_TIMEOUT 60000
-#define READ_TIMEOUT 5000
+#define COLLECT_TIMEOUT 60000  //Send COLLECT every 60s
+#define READ_TIMEOUT 5000       //Read sensor data every 5s
 
 module DataCollectionC {
 
@@ -17,15 +16,13 @@ module DataCollectionC {
             interface SplitControl as RadioControl;
             interface Receive;
             
-            interface SplitControl as SerialControl;
-    	    interface AMSend as SerialAMSend;
-    	    interface Packet as SerialPacket; 
-            
             interface Timer<TMilli> as CollectTimer;
             interface Timer<TMilli> as ReadTimer;
             interface Timer<TMilli> as RespTimer;
             interface Timer<TMilli> as RelayCollectTimer;
             interface Timer<TMilli> as RelayResponseTimer;
+            
+            interface LocalTime<TMilli>;
             
             interface Read<uint16_t> as TempRead;
             interface Read<uint16_t> as HumRead;
@@ -34,22 +31,25 @@ module DataCollectionC {
         }
 } implementation {
 
+    /******* SIMULATION PARAMETERS ************/
     uint16_t num_nodes = 10;
     
-    const uint16_t RELAY_INTERVAL = 10000;
-    const uint16_t RESP_INTERVAL = 10000;
+    const uint16_t RELAY_INTERVAL = 500;
+    const uint16_t RESP_INTERVAL = 500;
     const uint16_t REL_COLLECT_INTERVAL = 200;
-    
-    //variabili
+    const uint16_t RESP_OFFSET = 600;
+    /******************************************/
+
     uint8_t role = SENSOR_ROLE; // node ROLE
     
     uint16_t next_hop; //Next hop in the spanning tree in the route to the SINK
     uint8_t last_counter = 0; //Counter for collect message
     
-    uint8_t i_t = 0, i_h = 0; //indexes for temp and hum
-    
     uint16_t receive_counter = 0; //number of packets received by the SINK
-    long last_msg_time = 0; // TODO save time of last receive (in the SINK)
+    uint32_t collect_time = 0; // last collect send time (in SINK)
+    uint32_t last_msg_time = 0; //time of last receive (in SINK)
+    
+    uint8_t i_t = 0, i_h = 0; //indexes for temp and hum
     
     uint16_t avg_temp;
     uint16_t avg_hum;
@@ -57,13 +57,13 @@ module DataCollectionC {
     bool radio_busy = FALSE;
     
     message_t packet;
-    message_t serialPacket;
     Message* receivedPayload;
     
+    // Buffers for Packets to relay
     #define BUFFER_SIZE 20
-    
     uint16_t relayTemp[BUFFER_SIZE], relayHum[BUFFER_SIZE], relayTempIndex = 0, relayHumIndex = 0;
     
+    // Tasks
     task void send_resp();
     task void relayCollect();
     task void relayResponse();
@@ -79,8 +79,7 @@ module DataCollectionC {
         dbg("boot","Application booted.\n");
         dbg("boot","[role] My role is %u.\n",role);  
         
-        call RadioControl.start(); //startup radio 
-        call SerialControl.start();
+        call RadioControl.start(); //startup radio
 
     }
     
@@ -107,19 +106,6 @@ module DataCollectionC {
     }   
   
     event void RadioControl.stopDone(error_t err){}
-    
-    //***************** SerialControl interface ********************//
-    event void SerialControl.startDone(error_t err) {}
-    
-    event void SerialControl.stopDone(error_t err){}
-    
-    //********************* SerialAMSend interface ****************//
-    event void SerialAMSend.sendDone(message_t* bufPtr, error_t error) {
-        if (&serialPacket == bufPtr) {
-            dbg("radio_send", "Serial Packet sent. STATUS = %d\n\n",error);
-        } 
-    }
-    
     
     //***************** ReadTimer interface ********************//
     event void ReadTimer.fired() {
@@ -149,13 +135,14 @@ module DataCollectionC {
            
         Message* mess=(Message*)(call RadioPacket.getPayload(&packet,sizeof(Message)));
         
-        if(last_counter > 0){
+        if(last_counter > 0){ //skip first round
+            uint32_t t = last_msg_time - collect_time;
             dbg("sink", "[SINK] Packets received after last COLLECT: %hhu \n", receive_counter);
-            
+            dbg_clear("sink", "\tCollected in %u[ms] \n", t );            
             dbg_clear("sink", "\t\tReceived packets: %.2lf% \n", ((double)(receive_counter*100.0/(num_nodes-1))) );
             dbg_clear("sink", "\t\tAverage temp: %u \n", avg_temp);
             dbg_clear("sink", "\t\tAverage humidity: %u \n", avg_hum);
-            dbg_clear("csv", "%.2lf%,%u,%u\n",((double)(receive_counter*100.0/(num_nodes-1))), avg_temp, avg_hum);
+            dbg_clear("csv", "%.2lf%,%u,%u,%u\n",((double)(receive_counter*100.0/(num_nodes-1))), avg_temp, avg_hum, t);
         }
         
         last_counter++;
@@ -164,6 +151,9 @@ module DataCollectionC {
         mess->counter = last_counter;
         mess->temp = 99;
         mess->hum = 99;
+        
+        collect_time = call LocalTime.get();
+        dbg_clear("sink", "\n[SINK]Collect sent at %u \n", collect_time);
         
         if(call RadioAMSend.send(AM_BROADCAST_ADDR,&packet,sizeof(Message)) == SUCCESS){
             
@@ -214,7 +204,7 @@ module DataCollectionC {
 	                
                         post relayCollect(); // relay COLLECT to nearby nodes
                    
-                        call RespTimer.startOneShot( ( (call Random.rand16()) % RESP_INTERVAL) + 1500 );
+                        call RespTimer.startOneShot( ( (call Random.rand16()) % RESP_INTERVAL) + RESP_OFFSET );
                  
                 }
 	            break;
@@ -224,6 +214,7 @@ module DataCollectionC {
 	            if(role == SINK_ROLE){
 	                
 	                dbg("sink", "[SINK] Received values {temp: %u, hum: %u} at %s \n", mess->temp, mess->hum, sim_time_string());
+	                last_msg_time = call LocalTime.get();
 	                
 	                if(receive_counter == 0){
 	                    avg_temp = mess->temp;
@@ -236,7 +227,7 @@ module DataCollectionC {
 	                               
 	            } else {
 	                
-	                //keep last received value in buffer, limited to 10 elements.
+	                //keep last received value in buffer, limited to BUFFER_SIZE elements.
 	                if(relayTempIndex < BUFFER_SIZE && relayHumIndex < BUFFER_SIZE){
 	                        relayTemp[relayTempIndex++] = mess->temp;
 	                        relayHum[relayHumIndex++] = mess->hum;
@@ -294,11 +285,13 @@ module DataCollectionC {
         if(!radio_busy){
             Message* resp = (Message*)(call RadioPacket.getPayload(&packet,sizeof(Message)));
             dbg("radio_send", "SEND RESPONSE\n");
+            // create new message
             resp->msg_type = COLLECT_RESP;
             resp->counter = last_counter;
             resp->temp = avg_temp;
             resp->hum = avg_hum;
             
+            // reset values
             i_t = 0;
             i_h = 0;
             avg_temp = 0;
@@ -323,6 +316,7 @@ module DataCollectionC {
         }
     }
     
+    // Relay COLLECT message in broadcast
     task void relayCollect(){
         
         if(!radio_busy){
@@ -336,7 +330,6 @@ module DataCollectionC {
             if(call RadioAMSend.send(AM_BROADCAST_ADDR,&packet,sizeof(Message)) == SUCCESS){
                 
                 radio_busy = TRUE;
-                
                 dbg("radio_send", "RELAY Packet passed to lower layer successfully!\n");
                 dbg_clear("radio_pack","\t Source: %hhu \n ", call AMPacket.source( &packet ) );
                 dbg_clear("radio_pack","\t Destination: %hhu \n ", call AMPacket.destination( &packet ) );
@@ -351,6 +344,7 @@ module DataCollectionC {
         }
     }
     
+    // relay COLLECT response to next hop in the spanning tree
     task void relayResponse() {
         
         if(!radio_busy){
@@ -363,7 +357,7 @@ module DataCollectionC {
                 
                 if(call RadioAMSend.send(next_hop,&packet,sizeof(Message)) == SUCCESS){
                
-                    
+                        radio_busy = TRUE;
                         dbg("relay_resp", "RELAY RESPONSE TO NEXT_HOP \n");
                         dbg_clear("relay_resp","\t Source: %hhu \n ", call AMPacket.source( &packet ) );
                         dbg_clear("relay_resp","\t Destination: %hhu \n ", call AMPacket.destination( &packet ) );
@@ -371,7 +365,6 @@ module DataCollectionC {
                         dbg_clear("relay_resp","\t Counter: %hhu \n", msg->counter);
                         dbg_clear("relay_resp","\t temperature: %hhu \n", msg->temp);
                         dbg_clear("relay_resp","\t humidity: %hhu \n", msg->hum);
-                        radio_busy = TRUE;
                 } else {
                         dbg("radio_error", "ERROR RELAYING RESPONSE TO NEXT_HOP\n");
                 }           

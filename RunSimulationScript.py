@@ -52,21 +52,22 @@ print "Activate debug message on channel role"
 print "Activate debug message on channel nex_hop"
 #t.addChannel("next_hop",out);
 print "Activate debug message on channel sink"
-#t.addChannel("sink",out);
+t.addChannel("sink",out);
 print "Activate debug message on channel radio_error"
 t.addChannel("radio_error",out);
-t.addChannel("csv", csv);
-#t.addChannel("relay_resp", out);
+#t.addChannel("csv", csv);
+t.addChannel("relay_resp", out);
 
-numNodes = 10;
+numNodes = 10; #set the number of nodes. NOTE: change this value also in DataCollection
 
 nodes = [];
 
+#node creation and boot
 for x in range(1,numNodes+1):
         nodes.insert(x-1,t.getNode(x));
         boot_time = random.randint(0,5) * t.ticksPerSecond();
         nodes[x-1].bootAtTime(boot_time);
-        #print >>out,"Creating node ",x,"...Will boot at ",boot_time/t.ticksPerSecond(), "[sec]";  
+        print >>out,"Creating node ",x,"...Will boot at ",boot_time/t.ticksPerSecond(), "[sec]";  
 
 
 
@@ -77,9 +78,9 @@ for line in lines:
   s = line.split()
   if (len(s) > 0):
         if(s[0] == 'gain'):
-            #print >>out,">>>Setting radio channel from node ", s[0], " to node ", s[1], " with gain ", s[2], " dBm"
             radio.add(int(s[1]), int(s[2]), float(s[3]))
-        #radio.add(int(s[0]), int(s[1]), float(s[2]))
+        elif(s[0] != 'noise'):
+            radio.add(int(s[0]), int(s[1]), float(s[2]))
 
 #Creazione del modello di canale
 print >>out,"Initializing Closest Pattern Matching (CPM)...";
@@ -104,8 +105,8 @@ for line in lines:
             t.getNode(i).addNoiseTraceReading(val)
 print >>out,"Done!";
 
+#create noise model
 for i in range(1, numNodes+1):
-    #print >>out,">>>Creating noise model for node:",i;
     t.getNode(i).createNoiseModel()
 
 print >>out,"[TOSSIM] Start simulation with TOSSIM! \n\n\n";
