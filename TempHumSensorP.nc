@@ -21,7 +21,7 @@ generic module TempHumSensorP() {
 	//***************** Read interface ********************//
 	command error_t TempRead.read(){
 
-		temp_read_value = TOS_NODE_ID;//TEMP_DATA[temp_index];
+		temp_read_value = TEMP_DATA[temp_index];
 		temp_index++;
 		if(temp_index==TEMP_DATA_SIZE)
 			temp_index = 0;
@@ -31,7 +31,7 @@ generic module TempHumSensorP() {
 	}
 
 	command error_t HumRead.read(){
-		hum_read_value = TOS_NODE_ID;//HUM_DATA[hum_index];
+		hum_read_value = HUM_DATA[hum_index];
 		hum_index++;
 		if(hum_index==HUM_DATA_SIZE)
 			hum_index = 0;

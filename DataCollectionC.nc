@@ -34,10 +34,10 @@ module DataCollectionC {
     /******* SIMULATION PARAMETERS ************/
     uint16_t num_nodes = 10;
     
-    const uint16_t RELAY_INTERVAL = 500;
-    const uint16_t RESP_INTERVAL = 500;
+    const uint16_t RELAY_INTERVAL = 2000; // response RELAY delay
+    const uint16_t RESP_INTERVAL = 500; //response delay
     const uint16_t REL_COLLECT_INTERVAL = 200;
-    const uint16_t RESP_OFFSET = 600;
+    const uint16_t RESP_OFFSET = 1000; //wait some time to complete COLLECT spreading
     /******************************************/
 
     uint8_t role = SENSOR_ROLE; // node ROLE
@@ -48,6 +48,8 @@ module DataCollectionC {
     uint16_t receive_counter = 0; //number of packets received by the SINK
     uint32_t collect_time = 0; // last collect send time (in SINK)
     uint32_t last_msg_time = 0; //time of last receive (in SINK)
+    
+    uint16_t sent_pkt_num = 0; // number of packets sent between Collects
     
     uint8_t i_t = 0, i_h = 0; //indexes for temp and hum
     
@@ -196,11 +198,15 @@ module DataCollectionC {
 	            
 	            // check if this is a new COLLECT request
 	            if(mess->counter > last_counter){
+	                //print out data about last collect
+	                dbg_clear("packets_csv", "%u,%u,%u\n",last_counter,TOS_NODE_ID,sent_pkt_num);
+	                sent_pkt_num = 0;
 	                
 	                last_counter = mess->counter;
 	                next_hop = call AMPacket.source( buf ); //set next-hop as the source of the packet
 	                
 	                dbg("next_hop", "I am node %hhu, my next hop is %hhu.\n", TOS_NODE_ID, next_hop);
+	                
 	                
                         post relayCollect(); // relay COLLECT to nearby nodes
                    
@@ -299,8 +305,10 @@ module DataCollectionC {
             
             
             if(call RadioAMSend.send(next_hop,&packet,sizeof(Message)) == SUCCESS){
-                
+               
+                sent_pkt_num++;
                 radio_busy = TRUE;
+                
                 dbg("radio_send", "RESP Packet passed to lower layer successfully!\n");
                 dbg_clear("radio_pack","\t Source: %hhu \n ", call AMPacket.source( &packet ) );
                 dbg_clear("radio_pack","\t Destination: %hhu \n ", call AMPacket.destination( &packet ) );
@@ -328,8 +336,10 @@ module DataCollectionC {
 
 
             if(call RadioAMSend.send(AM_BROADCAST_ADDR,&packet,sizeof(Message)) == SUCCESS){
-                
+            
+                sent_pkt_num++;    
                 radio_busy = TRUE;
+                
                 dbg("radio_send", "RELAY Packet passed to lower layer successfully!\n");
                 dbg_clear("radio_pack","\t Source: %hhu \n ", call AMPacket.source( &packet ) );
                 dbg_clear("radio_pack","\t Destination: %hhu \n ", call AMPacket.destination( &packet ) );
@@ -357,7 +367,9 @@ module DataCollectionC {
                 
                 if(call RadioAMSend.send(next_hop,&packet,sizeof(Message)) == SUCCESS){
                
+                        sent_pkt_num++;
                         radio_busy = TRUE;
+                        
                         dbg("relay_resp", "RELAY RESPONSE TO NEXT_HOP \n");
                         dbg_clear("relay_resp","\t Source: %hhu \n ", call AMPacket.source( &packet ) );
                         dbg_clear("relay_resp","\t Destination: %hhu \n ", call AMPacket.destination( &packet ) );
